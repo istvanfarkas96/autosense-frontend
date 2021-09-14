@@ -253,7 +253,7 @@ export default {
       this.selectedMarker.prices.forEach(item => {
         item.price = parseFloat(item.price)
       })
-      axios.put('http://127.0.0.1:3000/api/fuel-stations/' + this.selectedMarker.id, {
+      axios.put(config.apiBaseUrl + '/fuel-stations/' + this.selectedMarker.id, {
         id: this.selectedMarker.id,
         name: this.selectedMarker.name,
         address: this.selectedMarker.address,
@@ -300,8 +300,7 @@ export default {
     createNewFuelStation() {
       this.addFuelType();
       this.buildProductsObject();
-      //Todo:Change the edpoint link after deploying the backend
-      axios.post('http://127.0.0.1:3000/api/fuel-stations', {
+      axios.post(config.apiBaseUrl + '/fuel-stations', {
         name: this.fuelStationName,
         city: this.fuelStationCity,
         address: this.fuelStationAddress,
@@ -342,7 +341,7 @@ export default {
 
     getGasStations() {
       this.gasStations = [];
-      axios.get('http://127.0.0.1:3000/api/fuel-stations', {
+      axios.get(config.apiBaseUrl + '/fuel-stations', {
         auth: config.auth
       }).then(response => {
         if (response.data.length === 0) {
@@ -376,7 +375,7 @@ export default {
 
     deleteFuelStation() {
       this.infoWinOpen = false;
-      axios.delete('http://127.0.0.1:3000/api/fuel-stations/' + this.selectedMarker.id, {
+      axios.delete(config.apiBaseUrl + '/fuel-stations/' + this.selectedMarker.id, {
         auth: config.auth
       }).then(response => {
         this.markers.forEach((item, index) => {
