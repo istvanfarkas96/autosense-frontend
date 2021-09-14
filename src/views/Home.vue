@@ -22,26 +22,41 @@
           >
             <div class="card">
               <div class="card-content">
-                <div class="media">
-                  <div class="media-content">
-                    <p class="title is-4">{{ selectedMarker.name }}</p>
-                  </div>
-                </div>
-                <div class="content">
-                  <h3>Prices</h3>
-                  <div v-for="price in selectedMarker.prices">
-                    <p>{{ price.product_id }} - {{ price.currency }} <strong>{{ price.price }}</strong></p>
-                  </div>
-                  <h3>Pump statuses</h3>
-                  <div v-for="pump in selectedMarker.pumps">
-                    <br>
-                    <p class="font-weight-bold mb-2">{{ pump.product_id }}</p>
-                    <div v-for="point in pump.points">
-                      <p class="mb-1">Pomp nr.{{ point.id }}: {{ point.status }}</p>
+                <div class="editable-content">
+                  <p v-if="!showEditForm" class="title is-4">{{ selectedMarker.name }}</p>
+                  <v-text-field v-if="showEditForm" v-model="selectedMarker.name"></v-text-field>
+                  <div class="content pt-4">
+                    <h3>Prices</h3>
+                    <div v-for="price in selectedMarker.prices">
+                      <p v-if="!showEditForm">{{ price.product_id }} - {{ price.currency }} <strong>{{ price.price }}</strong></p>
+                      <p v-if="showEditForm">{{ price.product_id }} - {{ price.currency }} <v-text-field v-model="price.price"></v-text-field></p>
                     </div>
                   </div>
                 </div>
+                <h3>Pump statuses</h3>
+                <div v-for="pump in selectedMarker.pumps">
+                  <br>
+                  <p class="font-weight-bold mb-2">{{ pump.product_id }}</p>
+                  <div v-for="point in pump.points">
+                    <p class="mb-1">pump nr.{{ point.id }}: {{ point.status }}</p>
+                  </div>
+                </div>
               </div>
+              <v-btn v-if="!showEditForm" class="mt-4 mb-3 justify-center" v-on:click="showEditForm = true">
+                Edit
+                <v-icon
+                    left
+                    class="pl-5"
+                >
+                  mdi-account-edit-outline
+                </v-icon>
+              </v-btn>
+              <v-btn v-if="showEditForm" class="mt-4 mb-3 justify-center" v-on:click="updateStation()">
+                Save
+              </v-btn>
+              <v-btn class="mt-4 mb-3 ml-3 justify-center" v-on:click="deleteFuelStation()">
+                Delete
+              </v-btn>
             </div>
           </GmapInfoWindow>
         </GmapMap>
@@ -140,21 +155,43 @@
 
           </div>
           <div class="mb-5">
-            <h3>Pomps available</h3>
-            <v-row v-for="i in pompCounter">
-              <v-col class="">Pomp {{ i }}
-
+            <h3>Pumps available</h3>
+            <v-row class="pt-3" v-for="i in pumpCounter">
+              <v-col cols="5">
+                Pump {{ i }}
+                <v-switch
+                    v-model="pumpAvailability[i-1].status"
+                    value="available"
+                ></v-switch>
+              </v-col>
+              <v-col>
+                <v-select
+                    class="mr-3 ml-3"
+                    v-model="pumpAvailability[i-1].product_id"
+                    :items="items"
+                    label="Fuel type"
+                    required
+                ></v-select>
               </v-col>
             </v-row>
+            <v-btn
+                small
+                class="ma-2 mt-8"
+                @click="addPump()"
+            >
+              <v-icon
+                  left
+              >
+                mdi-plus
+              </v-icon>
+              Add pump
+            </v-btn>
           </div>
           <v-btn
               class="mr-4"
               @click="createNewFuelStation()"
           >
             submit
-          </v-btn>
-          <v-btn @click="">
-            clear
           </v-btn>
         </form>
       </v-col>
@@ -164,6 +201,7 @@
 
 <script>
 import axios from 'axios'
+import config from '../config/index.ts'
 
 export default {
   name: 'Home',
@@ -177,11 +215,14 @@ export default {
       stationLongitude: '',
       selectedFuelType: '',
       selectedFuelPrice: '',
-      pompCounter: 1,
+      pumpCounter: 0,
+      showEditForm: false,
       prices: [],
       markers: [],
       gasStations: [],
       infoContent: '',
+      products: [],
+      pumpAvailability: [],
       infoWindowPos: {
         lat: 50,
         lng: 0
@@ -207,9 +248,33 @@ export default {
   },
 
   methods: {
+    updateStation() {
+      this.showEditForm = false;
+      this.selectedMarker.prices.forEach(item => {
+        item.price = parseFloat(item.price)
+      })
+      axios.put('http://127.0.0.1:3000/api/fuel-stations/' + this.selectedMarker.id, {
+        id: this.selectedMarker.id,
+        name: this.selectedMarker.name,
+        address: this.selectedMarker.address,
+        city: this.selectedMarker.city,
+        latitude: this.selectedMarker.position.lat,
+        longitude: this.selectedMarker.position.lng,
+        prices: this.selectedMarker.prices,
+        products: this.selectedMarker.pumps
+      }, {
+        auth: config.auth
+      })
+    },
+
+    addPump() {
+      this.pumpAvailability[this.pumpCounter] = {id: this.pumpCounter + 1, status: 'not available'};
+      this.pumpCounter++;
+    },
+
     addFuelType() {
       const item = {
-        'price': this.selectedFuelPrice,
+        'price': parseFloat(this.selectedFuelPrice),
         'currency': 'CHF',
         'product_id': this.selectedFuelType
       }
@@ -219,16 +284,48 @@ export default {
       this.selectedFuelType = '';
     },
 
+    buildProductsObject() {
+      this.pumpAvailability.forEach((item, index) => {
+        this.products[index] = {
+          "product_id": item.product_id,
+          "points": [
+            {
+              "id": item.id.toString(),
+              "status": item.status
+            }]
+        };
+      })
+    },
+
     createNewFuelStation() {
       this.addFuelType();
+      this.buildProductsObject();
+      //Todo:Change the edpoint link after deploying the backend
       axios.post('http://127.0.0.1:3000/api/fuel-stations', {
         name: this.fuelStationName,
         city: this.fuelStationCity,
         address: this.fuelStationAddress,
-        latitude: this.stationLatitude,
-        longitude: this.stationLongitude,
-        prices: this.prices
+        latitude: parseFloat(this.stationLatitude),
+        longitude: parseFloat(this.stationLongitude),
+        prices: this.prices,
+        products: this.products
+      }, {
+        auth: config.auth
+      }).then(response => {
+        this.clearInputs();
+        this.getGasStations();
       })
+    },
+
+    clearInputs() {
+      this.fuelStationName = '';
+      this.fuelStationCity = '';
+      this.fuelStationAddress = '';
+      this.stationLatitude = '';
+      this.stationLongitude = ''
+      this.prices = [];
+      this.pumpAvailability = [];
+      this.pumpCounter = 0;
     },
 
     toggleInfoWindow: function (marker, idx) {
@@ -244,7 +341,10 @@ export default {
     },
 
     getGasStations() {
-      axios.get('http://127.0.0.1:3000/api/fuel-stations').then(response => {
+      this.gasStations = [];
+      axios.get('http://127.0.0.1:3000/api/fuel-stations', {
+        auth: config.auth
+      }).then(response => {
         if (response.data.length === 0) {
           return;
         }
@@ -255,13 +355,17 @@ export default {
     },
 
     setupMarkers() {
+      this.markers = [];
       this.gasStations.forEach(station => {
         const marker = {
+          id: station.id,
+          name: station.name,
+          address:station.address,
+          city: station.city,
           position: {
             lat: station.latitude,
             lng: station.longitude
           },
-          name: station.name,
           prices: station.prices,
           pumps: station.products
         }
@@ -269,6 +373,19 @@ export default {
         this.markers.push(marker);
       })
     },
+
+    deleteFuelStation() {
+      this.infoWinOpen = false;
+      axios.delete('http://127.0.0.1:3000/api/fuel-stations/' + this.selectedMarker.id, {
+        auth: config.auth
+      }).then(response => {
+        this.markers.forEach((item, index) => {
+          if (item.id === this.selectedMarker.id) {
+            this.markers.splice(index, 1)
+          }
+        })
+      })
+    }
   }
 }
 </script>
